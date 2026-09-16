@@ -7,6 +7,7 @@ import ProductivityPage from './pages/Productivity.jsx'
 import CareerPage from './pages/Career.jsx'
 import RecommendationsPage from './pages/Recommendations.jsx'
 import DashboardPage from './pages/Dashboard.jsx'
+import RoadmapsPage from './pages/Roadmaps.jsx'
 
 export default function App() {
   return (
@@ -64,6 +65,14 @@ export default function App() {
         element={
           <RequireAuth>
             <RecommendationsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/roadmaps"
+        element={
+          <RequireAuth>
+            <RoadmapsPage />
           </RequireAuth>
         }
       />

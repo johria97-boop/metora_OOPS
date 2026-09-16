@@ -17,6 +17,7 @@ body {
 .productivity-panel,
 .career-panel,
 .recommendation-panel,
+.roadmap-panel,
 .dashboard-panel,
 .dashboard-metric {
   max-width: 860px;
@@ -41,6 +42,7 @@ body {
 .productivity-panel,
 .career-panel,
 .recommendation-panel,
+.roadmap-panel,
 .dashboard-panel,
 .dashboard-metric {
   background: rgba(255, 255, 255, 0.95);
@@ -61,6 +63,24 @@ body {
 
 .recommendation-closed {
   opacity: 0.72;
+}
+
+.roadmap-panel {
+  max-width: none;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.roadmap-step {
+  border-left: 0.3rem solid #adb5bd !important;
+}
+
+.roadmap-step.status-in_progress {
+  border-left-color: #0d6efd !important;
+}
+
+.roadmap-step.status-completed {
+  border-left-color: #198754 !important;
+  background: rgba(25, 135, 84, 0.04);
 }
 
 .progress {

@@ -2,7 +2,7 @@
 
 ## 1. Final verdict
 
-**COMPLETE for the defined academic scope.** Phase 9 is **PASS**. The clean backend suite reports 98 tests, 98 passed, 0 failed, 0 errors, and 0 skipped. The executable backend package and frontend production bundle both build successfully. Live MySQL and Gemini checks are **BLOCKED**, not failed, because their environment credentials are absent.
+**COMPLETE for the defined academic scope.** Phase 10 is **PASS**. The clean backend suite reports 137 tests, 137 passed, 0 failed, 0 errors, and 0 skipped. The executable backend package and frontend production bundle both build successfully. Real MySQL 8.0.46 schema validation, one controlled Gemini roadmap generation, stored progress reload, and dashboard integration all passed.
 
 ## 2. Architecture
 
@@ -23,6 +23,7 @@ Spring Boot REST API
   +--> Productivity
   +--> Career
   +--> Recommendation
+  +--> Roadmap
   +--> Dashboard
   |
   v
@@ -41,6 +42,8 @@ GeminiClient
   |
   v
 Gemini API
+
+RoadmapService --> RoadmapProvider --> GeminiClient --> Gemini API
 ```
 
 ## 3. Implemented modules
@@ -51,12 +54,13 @@ Gemini API
 - Productivity: tasks, habits, calendar events
 - Career: singleton profile, interests, skills
 - Recommendation: explicit Gemini generation, validation, deduplication, lifecycle, history
+- Roadmap: explicit Gemini generation, aggregate persistence, step status, and calculated progress
 - Dashboard: one-request read-only aggregation of existing student data
 - Common: behavioral interfaces, security configuration, API exceptions and error handling
 
 ## 4. Database design summary
 
-The 11 necessary tables are `users`, `students`, `academic_records`, `study_plans`, `tasks`, `habits`, `calendar_events`, `career_profiles`, `career_profile_interests`, `skills`, and `recommendations`. `students.user_id` and `career_profiles.student_id` are unique one-to-one foreign keys. Other feature records have mandatory student foreign keys. Skills have a unique `(student_id, normalized_name)` constraint. Interests are composed under their career profile. Recommendation terminal states remain stored as history. There is no dashboard table.
+The 13 necessary tables are `users`, `students`, `academic_records`, `study_plans`, `tasks`, `habits`, `calendar_events`, `career_profiles`, `career_profile_interests`, `skills`, `recommendations`, `roadmaps`, and `roadmap_steps`. Roadmaps belong to students; ordered steps belong to a roadmap and are cascade/orphan-managed. `(roadmap_id, position)` is unique. Step status is persisted while progress is derived. There is no dashboard table.
 
 Production uses `DB_DDL_AUTO=validate` by default. A one-time local `update` run is documented for an empty development schema; no destructive schema mode is configured.
 
@@ -66,13 +70,14 @@ The exact evidence map is maintained in [OOP_ARCHITECTURE.md](OOP_ARCHITECTURE.m
 
 - Encapsulation: private entity fields and invariant-protecting update/lifecycle methods
 - Association/composition: student-owned entities and `CareerProfile`-owned interests
-- Interfaces/abstraction: `Trackable`, `Schedulable`, `RecommendationProvider`, and Spring Data contracts
-- Runtime polymorphism/overriding: `StudyPlan` and `Habit` implement `getProgress()`; `Task` and `CalendarEvent` implement scheduling operations; provider implementations are substitutable
+- Interfaces/abstraction: `Trackable`, `Schedulable`, `RecommendationProvider`, `RoadmapProvider`, and Spring Data contracts
+- Runtime polymorphism/overriding: `StudyPlan`, `Habit`, and `Roadmap` implement `getProgress()`; provider implementations are substitutable
+- Composition: `Roadmap` owns its ordered `RoadmapStep` collection
 - Constructors: protected JPA constructors plus public valid-creation constructors
 - Collections/enums: meaningful `List`/`Set` use and typed closed domain states
 - Exception handling: `ApiException` and `GlobalExceptionHandler`
 - Dependency injection: constructor injection across production components
-- Method overloading: **NOT REQUIRED**
+- Method overloading: used naturally by `GeminiClient` for its two provider request types
 - Custom domain inheritance: **INTENTIONALLY DEFERRED** because no truthful substitutable IS-A behavior exists
 
 ## 6. Security summary
@@ -92,55 +97,55 @@ The known browser-side tradeoff is JWT storage in `localStorage`, which is expos
 
 ## 7. Gemini integration summary
 
-React never calls Gemini. `RecommendationService` builds minimal student context and depends on `RecommendationProvider`; `GeminiClient` alone knows Gemini HTTP details. Output is treated as untrusted: structured content is parsed, limited to five entries, enum/length validated, normalized, deduplicated against active records, then persisted. Controlled errors cover missing keys, rate limits, timeouts, provider failures, transport failures, and malformed responses. Offline tests use a stub/local server and consume no quota.
+React never calls Gemini. Recommendation and roadmap services depend on separate provider contracts; one `GeminiClient` implements both and owns the shared HTTP/key/model/timeout/error boundary. Roadmap output is schema-constrained, parsed as untrusted input, fully validated, deterministically ordered, then persisted. Only `POST /api/roadmaps/generate` calls the provider; roadmap reads, progress updates, and dashboard loads are MySQL-only. Offline tests use stubs/local HTTP and consume no quota.
 
 ## 8. Dashboard summary
 
-`GET /api/dashboard` is authenticated and read-only. `Dashboard.jsx` makes one request to it. `DashboardService` resolves the current student, reads existing repositories, reuses domain progress calculations, and returns DTO summaries and a three-item active recommendation preview. It creates no entity/table and never invokes Gemini.
+`GET /api/dashboard` is authenticated and read-only. `DashboardService` resolves the current student, reads existing repositories, and returns stored roadmap totals plus the current roadmap's calculated progress alongside existing summaries. It creates no entity/table and never invokes Gemini.
 
 ## 9. Test results
 
 | Metric | Result |
 |---|---:|
 | Previous baseline | 98 |
-| New Phase 9 tests | 0 |
-| Total | 98 |
-| Passed | 98 |
+| New Phase 10 tests | 39 |
+| Total | 137 |
+| Passed | 137 |
 | Failed | 0 |
 | Errors | 0 |
 | Skipped | 0 |
 
-Command: `backend\mvnw.cmd clean test`. Nine Surefire XML reports independently total the same 98 tests.
+Command: `backend\mvnw.cmd clean test`. Eleven Surefire XML reports independently total the same 137 tests.
 
 ## 10. Build results
 
 - Backend: **PASS** via `backend\mvnw.cmd package`; executable JAR: `backend\target\mentora-backend-0.0.1-SNAPSHOT.jar`
 - Frontend install: **PASS**; 97 packages audited, 0 vulnerabilities reported
-- Frontend: **PASS** via `npm run build`; Vite transformed 107 modules and emitted `frontend\dist`
+- Frontend: **PASS** via `npm run build`; Vite transformed 108 modules and emitted `frontend\dist`
 - Development server: **PASS**; Vite became ready on `127.0.0.1:5173`
-- Routes: `/auth`, `/dashboard`, `/profile`, `/academics`, `/productivity`, `/career`, and `/recommendations` each returned the SPA shell with HTTP 200
+- Routes: `/auth`, `/dashboard`, `/profile`, `/academics`, `/productivity`, `/career`, `/recommendations`, and `/roadmaps` each returned the SPA shell with HTTP 200
 
 Generated `target`, `dist`, and `node_modules` directories remain ignored and are not part of the source deliverable.
 
 ## 11. Live MySQL status
 
-**BLOCKED.** `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET` were not present. No credentials were invented and no existing data was touched. H2 integration/security tests provide source validation, but do not replace a deployment-environment MySQL smoke test.
+**PASS.** A controlled `DB_DDL_AUTO=update` startup against MySQL 8.0.46 added exactly `roadmaps` and `roadmap_steps`, their two foreign keys, and unique `(roadmap_id, position)`. No existing data was deleted. Configuration was restored to `validate`, and a clean validate-mode restart passed. Direct SQL confirmed the live validation roadmap and its 12 persisted steps.
 
 ## 12. Live Gemini status
 
-**BLOCKED.** `GEMINI_API_KEY` was not present. No quota was consumed. Provider service tests and local HTTP-client tests remain authoritative for offline behavior, but do not prove the external service/account state.
+**PASS.** Exactly one controlled live generation used configured model `gemini-3.5-flash-lite` and returned HTTP 201 with 12 validated steps. After one step update, API reload, direct MySQL inspection, and dashboard all showed one completed step and 8.3333% progress. Backend logs contained one roadmap-generation request; subsequent reads and dashboard access triggered none. The key was never printed.
 
 ## 13. File and duplication audit
 
-The repository contains 51 production Java files, 9 Java test files, 13 frontend source files, and these 3 Markdown documents. Excluding `node_modules`, `target`, `dist`, `.git`, and ignored editor files, the measured project is 527,296 bytes (about 514.9 KiB): backend source/config/wrapper 339,224 bytes, frontend source/config/lockfile 148,598 bytes, and root documentation/config 39,474 bytes. Exact-content hashing found no duplicate source files. No abandoned package, implementation layer, DAO, mapper explosion, generic utility dump, second Axios instance, second route guard, unused custom repository method, TODO/FIXME/HACK placeholder, debug print, or proven dead class was found. Generated directories are present for validation but correctly ignored.
+The repository contains 58 production Java files, 11 Java test files, 14 frontend source files, and these 3 Markdown documents. The roadmap module uses exactly seven production files and no step repository, implementation class, mapper, helper, utility, or split progress/generation service. The audit found one `Trackable`, one Axios client, one `AppNav`, one Gemini HTTP boundary, and no frontend Gemini/key reference. Generated directories are present for validation but correctly ignored.
 
-The largest code files are cohesive integration suites: `PhaseTwoIntegrationTests.java` (438 lines), `PhaseSixIntegrationTests.java` (424), and `PhaseThreeIntegrationTests.java` (423). The largest production UI file is `Productivity.jsx` (385), and the largest production Java file is `RecommendationService.java` (226). None warranted a final-phase split.
+Phase 10's largest production files are `Roadmaps.jsx` (225 lines), `RoadmapService.java` (210), `Roadmap.java` (186), and the extended `GeminiClient.java` (346). They remain cohesive; splitting would add the exact layers the low-file-count requirement rejects.
 
 Direct dependencies correspond to used features. No version was deliberately upgraded and no dependency was removed without evidence. The source remains compact; cohesive large files were not split solely to reduce line count.
 
 ## 14. Known limitations
 
-- MySQL and Gemini need real environment configuration for live validation.
+- MySQL and Gemini remain externally configured services and can become unavailable or rate-limited.
 - There are no versioned database migrations; initial development schema creation relies on one controlled Hibernate `update` run.
 - JWTs have no refresh/revocation architecture, and frontend token storage has an XSS tradeoff.
 - Production deployment automation, HTTPS termination, managed secrets, observability, rate limiting, email verification, password reset, and a formal accessibility audit are outside the current scope.
@@ -151,7 +156,7 @@ Direct dependencies correspond to used features. No version was deliberately upg
 
 ## 16. PBL readiness and demonstration checklist
 
-**READY**, subject to supplying local MySQL credentials and optionally a Gemini key for live external-service steps.
+**READY**. The configured local MySQL and Gemini services were live-validated for Phase 10.
 
 1. Configure environment variables and start MySQL.
 2. Start the backend with `backend\mvnw.cmd spring-boot:run`.
@@ -163,7 +168,8 @@ Direct dependencies correspond to used features. No version was deliberately upg
 8. Save a career goal, interests, and skills.
 9. Open the dashboard and show the unified stored-data overview.
 10. Generate recommendations once, show history and complete/dismiss lifecycle, then return to the dashboard.
-11. Explain the architecture, student ownership, DTO/error boundary, and OOP examples.
+11. Generate a roadmap explicitly, update one step, reload it, and show stored progress on the dashboard.
+12. Explain the architecture, student ownership, DTO/error boundary, and OOP examples.
 
 If Gemini is unavailable, show existing stored recommendations if available, explain the provider boundary, and present the passing stub/local-server tests. Do not claim that a live call occurred.
 
@@ -175,7 +181,8 @@ Register -> Login -> Dashboard
                     |-> Academics -> Study Plans
                     |-> Tasks -> Habits -> Calendar
                     |-> Career -> Skills
-                    `-> Generate Recommendations -> Lifecycle -> Updated Dashboard
+                    |-> Generate Recommendations -> Lifecycle
+                    `-> Generate Roadmap -> Step Progress -> Updated Dashboard
 ```
 
 ## 17. Viva readiness
@@ -189,10 +196,10 @@ Register -> Login -> Dashboard
 - **Why `RecommendationProvider`?** It prevents Gemini HTTP details from coupling the service and enables deterministic offline substitution.
 - **Where is encapsulation?** Private entity fields change through methods such as `updateProgress`, `recordCompletion`, `reschedule`, `markCompleted`, and `dismiss`.
 - **Where is abstraction?** Behavioral interfaces, repositories, services, DTO records, and the provider boundary hide implementations.
-- **Where is polymorphism?** `Trackable`, `Schedulable`, and `RecommendationProvider` references dispatch to runtime implementations.
-- **Where are interfaces?** `Trackable`, `Schedulable`, `RecommendationProvider`, and the Spring Data repositories.
-- **Where is overriding?** Study plans/habits override progress; tasks/events override scheduling; GeminiClient overrides generation.
-- **Where is overloading?** No business method is overloaded; it is not required. Constructor variants are not method overloading.
+- **Where is polymorphism?** `Trackable`, `Schedulable`, `RecommendationProvider`, and `RoadmapProvider` references dispatch to runtime implementations.
+- **Where are interfaces?** `Trackable`, `Schedulable`, both provider contracts, and the Spring Data repositories.
+- **Where is overriding?** Study plans, habits, and roadmaps override progress; tasks/events override scheduling; GeminiClient implements both generation contracts.
+- **Where is overloading?** `GeminiClient.generate(StudentContext)` and `generate(RoadmapRequest)` are genuine provider-driven overloads.
 - **Where are constructors?** Entities use protected JPA no-arg and public invariant-validating constructors; components use constructor injection.
 - **Where are collections?** Ordered resource `List`s, unique interest `Set`, AI context groups, previews, and polymorphism tests.
 - **Where are enums?** User role, task/recommendation priority, skill level, recommendation category/status.
@@ -201,6 +208,7 @@ Register -> Login -> Dashboard
 - **Why composition over inheritance?** Student resources and profile interests are owned HAS-A relationships, not specialized parent types.
 - **How is ownership secured?** JWT subject lookup plus repository methods scoped by both resource ID and current student.
 - **Why does Dashboard not call Gemini?** A read endpoint must remain predictable, fast, quota-free, and side-effect-free; it shows stored results only.
+- **How is roadmap progress persisted?** Step status is stored in MySQL; `Roadmap.getProgress()` derives a bounded percentage from completed steps.
 - **How are duplicate AI recommendations prevented?** Titles are normalized, a generated batch uses a set, and active persisted category/title matches are checked before saving.
 
 The project is ready for its report, presentation, PBL demonstration, and OOTS viva, with live external checks explicitly dependent on local credentials.

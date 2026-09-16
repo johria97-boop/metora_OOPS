@@ -23,12 +23,12 @@ No inheritance hierarchy is present merely for demonstration.
 | Classes and objects | IMPLEMENTED | Entities, services, controllers, provider, security, and error classes model real responsibilities; their objects are created, validated, persisted, mapped, and tested. |
 | Encapsulation | IMPLEMENTED | Private entity state changes through invariant-protecting domain methods. |
 | Association | IMPLEMENTED | `Student` is associated with user-owned academic, productivity, career, and recommendation data. |
-| Composition | IMPLEMENTED | `CareerProfile` owns its `Set<String>` interests through `@ElementCollection`. |
-| Interfaces | IMPLEMENTED | `Trackable`, `Schedulable`, and `RecommendationProvider` express real contracts. |
+| Composition | IMPLEMENTED | `CareerProfile` owns its interests; `Roadmap` owns its ordered `RoadmapStep` lifecycle. |
+| Interfaces | IMPLEMENTED | `Trackable`, `Schedulable`, `RecommendationProvider`, and `RoadmapProvider` express real contracts. |
 | Abstraction | IMPLEMENTED | Behavioral, repository, DTO, service, and external-provider boundaries hide implementation detail. |
 | Runtime polymorphism | IMPLEMENTED | Multiple `Trackable`/`Schedulable` implementations and provider substitution dispatch through interfaces. |
 | Method overriding | IMPLEMENTED | Domain classes implement interface operations with type-specific behavior. |
-| Method overloading | NOT REQUIRED | No business use case needs one method name with multiple parameter signatures. |
+| Method overloading | IMPLEMENTED | `GeminiClient.generate(...)` fulfills two real provider contracts with distinct request types. |
 | Constructors | IMPLEMENTED | Protected no-argument JPA constructors coexist with public invariant-validating creation constructors. |
 | Inheritance | DEFERRED | No honest custom domain IS-A hierarchy currently has substitutable runtime behavior. |
 | Collections | IMPLEMENTED | `List` and `Set` model ordered resources, unique interests, context, and response groups. |
@@ -48,10 +48,12 @@ The principal domain classes are:
 - `Habit`: streak state and progress;
 - `CalendarEvent`: a dated student event;
 - `CareerProfile`: career goal and owned interests;
-- `Skill`: display name, normalized identity, and proficiency level; and
-- `Recommendation`: validated mentoring guidance with category, priority, lifecycle status, and normalized duplicate identity.
+- `Skill`: display name, normalized identity, and proficiency level;
+- `Recommendation`: validated mentoring guidance with category, priority, lifecycle status, and normalized duplicate identity;
+- `Roadmap`: a student-owned learning plan with computed progress; and
+- `RoadmapStep`: an ordered, phase-labelled, status-controlled component of a roadmap.
 
-`AuthService`, `StudentService`, `AcademicService`, `ProductivityService`, `CareerService`, `RecommendationService`, and `DashboardService` coordinate application use cases. `DashboardService` is an application-level aggregator rather than a persistent domain entity. Controllers translate authenticated HTTP requests into those service operations.
+`AuthService`, `StudentService`, `AcademicService`, `ProductivityService`, `CareerService`, `RecommendationService`, `RoadmapService`, and `DashboardService` coordinate application use cases. `RoadmapService` depends on `RoadmapProvider`, not Gemini transport details. `DashboardService` is an application-level aggregator rather than a persistent domain entity. Controllers translate authenticated HTTP requests into those service operations.
 
 ## 3. Encapsulation
 
@@ -68,6 +70,8 @@ Entity fields are private and there are no unrestricted public setters. State wi
 | `CareerProfile` | `updateCareerGoal(...)`, `replaceInterests(...)` | Bounded goal and normalized interest collection |
 | `Skill` | `rename(...)`, `updateLevel(...)` | Normalized name and required enum level |
 | `Recommendation` | constructor, `markCompleted()`, `dismiss()` | Valid bounded content, initially active state, and only active-to-terminal transitions |
+| `Roadmap` | constructor, `addStep(...)`, `getProgress()` | Valid normalized course identity, aggregate ownership, and derived bounded progress |
+| `RoadmapStep` | constructor, `updateStatus(...)` | Immutable generated structure and controlled non-null progress state |
 
 `CareerProfile.getInterests()` returns an unmodifiable copy, so callers cannot bypass `replaceInterests(...)`.
 
@@ -79,6 +83,7 @@ The persistence model uses HAS-A relationships rather than artificial IS-A relat
 - `AcademicRecord`, `StudyPlan`, `Task`, `Habit`, `CalendarEvent`, `Skill`, and `Recommendation` each have a mandatory many-to-one association to `Student`.
 - `CareerProfile` has a mandatory, unique one-to-one association to `Student`.
 - `CareerProfile` composes its interest strings with `@ElementCollection`. Interests have no independent identity or lifecycle outside that profile.
+- `Roadmap` composes an ordered list of `RoadmapStep` entities with cascade and orphan removal. A step has no independent lifecycle outside its roadmap.
 
 The student-resource relationships are associations rather than Java inheritance. Their foreign keys express ownership while services enforce authenticated access.
 
@@ -92,7 +97,7 @@ public interface Trackable {
 }
 ```
 
-Implemented by `StudyPlan` and `Habit`.
+Implemented by `StudyPlan`, `Habit`, and `Roadmap`.
 
 ```java
 public interface Schedulable {
@@ -115,11 +120,21 @@ public interface RecommendationProvider {
 
 `GeminiClient` is the production implementation. `RecommendationService` depends on this interface, while tests substitute a deterministic provider without changing service code. Its single production implementation is justified because it isolates an external system and enables offline tests, rather than anticipating hypothetical domain types.
 
+Phase 10 adds the corresponding compact roadmap boundary:
+
+```java
+public interface RoadmapProvider {
+    GeneratedRoadmap generate(RoadmapRequest request);
+}
+```
+
+`RoadmapService` depends on this contract. The existing `GeminiClient` also implements it, reusing the same backend-only key, model, timeout, HTTP transport, and error translation. Tests substitute a deterministic provider without network or quota use.
+
 ## 6. Abstraction
 
-`Trackable` abstracts how progress is obtained without exposing whether progress comes from study hours or a habit streak. `Schedulable` abstracts dated rescheduling without requiring callers to know whether the runtime object is a task or calendar event.
+`Trackable` abstracts how progress is obtained without exposing whether progress comes from study hours, a habit streak, or completed roadmap steps. `Schedulable` abstracts dated rescheduling without requiring callers to know whether the runtime object is a task or calendar event.
 
-Spring Data's `JpaRepository` interfaces abstract persistence. Services use repository contracts rather than DAOs or repository implementations. DTO records abstract the HTTP representation from JPA entities. `RecommendationProvider` abstracts recommendation generation so the application layer has no Gemini HTTP, authentication-header, model, or JSON-response dependency.
+Spring Data's `JpaRepository` interfaces abstract persistence. Services use repository contracts rather than DAOs or repository implementations. DTO records abstract the HTTP representation from JPA entities. `RecommendationProvider` and `RoadmapProvider` abstract generation so the application layer has no Gemini HTTP, authentication-header, model, or JSON-response dependency.
 
 `DashboardService` provides a read-only abstraction over several student-owned data sources. It reuses domain calculations and produces a composed `DashboardResponse` without exposing persistence entities or creating a second source of truth.
 
@@ -132,6 +147,8 @@ Spring Data's `JpaRepository` interfaces abstract persistence. Services use repo
 
 Phase 6 uses interface polymorphism at the application boundary: Spring injects `GeminiClient` as a `RecommendationProvider` in production, while `PhaseSixIntegrationTests` injects a stub implementation. The same `RecommendationService` invokes `generate(...)` against either runtime object.
 
+`PhaseTenRoadmapDomainTests` extends the domain example to a heterogeneous `List<Trackable>` containing `StudyPlan`, `Habit`, and `Roadmap`. `RoadmapService` also demonstrates provider substitution through `RoadmapProvider`.
+
 This is behavioral polymorphism used through shared contracts, not merely matching method names.
 
 ## 8. Method overriding
@@ -140,15 +157,17 @@ The following interface operations are overridden:
 
 - `StudyPlan.getProgress()` calculates completed study hours as a percentage of target hours.
 - `Habit.getProgress()` calculates current streak as a percentage of target streak and caps it at 100%.
+- `Roadmap.getProgress()` calculates completed steps as a percentage of total steps and returns zero for an empty roadmap.
 - `Task.getScheduledDate()` and `Task.reschedule(...)` operate on `dueDate`.
 - `CalendarEvent.getScheduledDate()` and `CalendarEvent.reschedule(...)` operate on `eventDate`.
 - `GeminiClient.generate(...)` implements the `RecommendationProvider` contract by performing a structured provider request and response conversion.
+- `GeminiClient.generate(RoadmapRequest)` implements `RoadmapProvider` using the same transport boundary.
 
 The same interface operation therefore has domain-specific runtime behavior.
 
 ## 9. Method overloading
 
-Method overloading is **NOT REQUIRED**. No business use case needs one method name with multiple parameter signatures, so artificial overloads were intentionally avoided.
+Method overloading is now used naturally: `GeminiClient` implements `generate(StudentContext)` and `generate(RoadmapRequest)` because two provider contracts share the generation verb but require different inputs and outputs. No artificial overload was added merely for demonstration.
 
 JPA entities do have a protected no-argument constructor for persistence and a public parameterized constructor for valid domain creation. These are constructor variants, not method overloading, and are documented separately to keep the OOP explanation technically precise.
 
@@ -173,6 +192,7 @@ Meaningful collection use includes:
 - `List` records inside `RecommendationProvider.StudentContext` for minimal academic, study-plan, task, habit, calendar, career, and skill data;
 - generated and stored recommendation lists, with a `Set<String>` used to deduplicate one generated batch;
 - dashboard summary and bounded preview lists composed from existing feature collections;
+- ordered roadmap steps composed within each roadmap and grouped by phase in the frontend;
 - `List<Trackable>` and `List<Schedulable>` in polymorphism tests; and
 - stream mapping from entities to immutable DTO record lists.
 
@@ -186,8 +206,10 @@ Closed value sets use nested enums:
 - `Task.Priority`: `LOW`, `MEDIUM`, `HIGH`;
 - `Skill.Level`: `BEGINNER`, `INTERMEDIATE`, `ADVANCED`;
 - `Recommendation.Category`: `ACADEMIC`, `PRODUCTIVITY`, `CAREER`;
-- `Recommendation.Priority`: `URGENT`, `HIGH`, `MEDIUM`, `LOW`; and
-- `Recommendation.Status`: `ACTIVE`, `COMPLETED`, `DISMISSED`.
+- `Recommendation.Priority`: `URGENT`, `HIGH`, `MEDIUM`, `LOW`;
+- `Recommendation.Status`: `ACTIVE`, `COMPLETED`, `DISMISSED`;
+- `Roadmap.Level`: `BEGINNER`, `INTERMEDIATE`, `ADVANCED`; and
+- `RoadmapStep.Status`: `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`.
 
 Task priority, skill level, and recommendation enums remain nested because they are local to one entity. JPA persists them with `EnumType.STRING`, preserving readable and stable database values.
 
@@ -205,7 +227,7 @@ Task priority, skill level, and recommendation enums remain nested because they 
 
 into consistent API error responses. Feature-specific exception classes and repeated controller `try/catch` blocks are unnecessary.
 
-`GeminiClient` maps missing configuration, timeout, rate-limit, HTTP, transport, and malformed-response conditions to controlled `ApiException` responses. `RecommendationService` additionally rejects invalid generated entries before persistence and converts unexpected provider failures without exposing configuration or provider internals.
+`GeminiClient` maps missing configuration, timeout, rate-limit, HTTP, transport, and malformed-response conditions to controlled `ApiException` responses. Recommendation and roadmap services additionally reject invalid generated content before persistence and convert unexpected provider failures without exposing configuration or provider internals.
 
 ## 14. Dependency injection
 
@@ -215,6 +237,7 @@ Production Spring components consistently use constructor injection:
 - services receive their feature repositories;
 - authenticated feature services receive `StudentService`;
 - `RecommendationService` receives `RecommendationProvider` plus only the student-scoped repositories needed to assemble context;
+- `RoadmapService` receives `RoadmapProvider`, `RoadmapRepository`, and `StudentService`;
 - `DashboardController` receives `DashboardService`, which receives `StudentService` and existing repositories through its constructor; and
 - security configuration receives authentication collaborators through bean method parameters.
 
@@ -232,7 +255,9 @@ There is no production field injection and no manual construction of services in
 - `RecommendationService.buildContext(...)` maps entities into provider-owned records, excluding database identifiers, email, roles, secrets, and normalized internal names.
 - `Recommendation.normalizeTitle(...)` gives service/database deduplication one stable case- and whitespace-insensitive identity while DTOs expose only the display title.
 - `Recommendation.markCompleted()` and `dismiss()` prevent arbitrary or repeated lifecycle mutation.
-- `DashboardService.getDashboard(...)` resolves the authenticated student once, composes factual summaries, and delegates progress calculations to `StudyPlan` and `Habit`.
+- `Roadmap.addStep(...)` owns both sides of the aggregate relationship, while `RoadmapStep.updateStatus(...)` is the only progress mutation.
+- `RoadmapService` validates and deterministically renumbers untrusted provider output before persisting the aggregate through one repository.
+- `DashboardService.getDashboard(...)` resolves the authenticated student once, composes factual summaries, and delegates progress calculations to `StudyPlan`, `Habit`, and `Roadmap`.
 
 ## 16. Relationship diagram
 
@@ -251,11 +276,14 @@ Student
  +-- CareerProfile
  |    `-- composed Set<String> interests
  +-- Skill
- `-- Recommendation
+ +-- Recommendation
+ `-- Roadmap implements Trackable
+      `-- composed List<RoadmapStep>
 
 Trackable
  |-- StudyPlan
- `-- Habit
+ |-- Habit
+ `-- Roadmap
 
 Schedulable
  |-- Task
@@ -264,10 +292,14 @@ Schedulable
 RecommendationProvider <|.. GeminiClient
 RecommendationService --> RecommendationProvider
 
+RoadmapProvider <|.. GeminiClient
+RoadmapService --> RoadmapProvider
+
 DashboardResponse
  |-- StudentSummary
  |-- AcademicSummary + StudyPlanSummary
  |-- TaskSummary + HabitSummary + CalendarSummary
  |-- CareerSummary
- `-- RecommendationSummary
+ |-- RecommendationSummary
+ `-- RoadmapSummary
 ```

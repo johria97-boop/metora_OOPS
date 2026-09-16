@@ -16,6 +16,8 @@ import com.mentora.productivity.Task;
 import com.mentora.productivity.TaskRepository;
 import com.mentora.recommendation.Recommendation;
 import com.mentora.recommendation.RecommendationRepository;
+import com.mentora.roadmap.Roadmap;
+import com.mentora.roadmap.RoadmapRepository;
 import com.mentora.student.Student;
 import com.mentora.student.StudentService;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,7 @@ public class DashboardService {
     private final CareerRepository careerRepository;
     private final SkillRepository skillRepository;
     private final RecommendationRepository recommendationRepository;
+    private final RoadmapRepository roadmapRepository;
 
     public DashboardService(
             StudentService studentService,
@@ -51,7 +54,8 @@ public class DashboardService {
             CalendarEventRepository calendarEventRepository,
             CareerRepository careerRepository,
             SkillRepository skillRepository,
-            RecommendationRepository recommendationRepository
+            RecommendationRepository recommendationRepository,
+            RoadmapRepository roadmapRepository
     ) {
         this.studentService = studentService;
         this.academicRepository = academicRepository;
@@ -62,6 +66,7 @@ public class DashboardService {
         this.careerRepository = careerRepository;
         this.skillRepository = skillRepository;
         this.recommendationRepository = recommendationRepository;
+        this.roadmapRepository = roadmapRepository;
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +82,8 @@ public class DashboardService {
                 habitSummary(student),
                 calendarSummary(student),
                 careerSummary(student),
-                recommendationSummary(student)
+                recommendationSummary(student),
+                roadmapSummary(student)
         );
     }
 
@@ -208,5 +214,18 @@ public class DashboardService {
             case MEDIUM -> 2;
             case LOW -> 3;
         };
+    }
+
+    private DashboardDtos.RoadmapSummary roadmapSummary(Student student) {
+        List<Roadmap> roadmaps = roadmapRepository.findByStudentOrderByCreatedAtDesc(student);
+        List<Roadmap> active = roadmaps.stream().filter(item -> !item.isCompleted()).toList();
+        Roadmap current = active.isEmpty()
+                ? roadmaps.stream().findFirst().orElse(null)
+                : active.getFirst();
+        DashboardDtos.RoadmapItem item = current == null ? null : new DashboardDtos.RoadmapItem(
+                current.getId(), current.getCourseName(), current.getProgress(),
+                current.getCompletedStepCount(), current.getSteps().size()
+        );
+        return new DashboardDtos.RoadmapSummary(roadmaps.size(), active.size(), item);
     }
 }

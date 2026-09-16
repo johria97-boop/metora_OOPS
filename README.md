@@ -1,6 +1,6 @@
 # MENTORA
 
-MENTORA is a compact modular-monolith learning management and personalized mentoring application. It combines student profile, academic planning, productivity tracking, career preparation, secure authentication, a read-only dashboard, and backend-only Gemini recommendations in one maintainable academic project.
+MENTORA is a compact modular-monolith learning management and personalized mentoring application. It combines student profile, academic planning, productivity tracking, career preparation, secure authentication, a read-only dashboard, backend-only Gemini recommendations, and persistent AI learning roadmaps in one maintainable academic project.
 
 See [OOP_ARCHITECTURE.md](OOP_ARCHITECTURE.md) for the OOP concept map and [FINAL_REPORT.md](FINAL_REPORT.md) for the final audit and demonstration guide.
 
@@ -12,6 +12,7 @@ See [OOP_ARCHITECTURE.md](OOP_ARCHITECTURE.md) for the OOP concept map and [FINA
 - Tasks, habits, and calendar events
 - Career profile, interests, and skills
 - Explicit Gemini-powered recommendation generation and lifecycle management
+- Explicit Gemini-powered learning-roadmap generation with persisted step progress
 - One-request, read-only student dashboard
 - Consistent validation, ownership checks, and API error responses
 
@@ -38,6 +39,7 @@ Mentora/
 |       |-- productivity/
 |       |-- career/
 |       |-- recommendation/
+|       |-- roadmap/
 |       |-- dashboard/
 |       `-- common/
 |-- frontend/
@@ -172,20 +174,24 @@ Only registration and login are public. All other routes require `Authorization:
 | Calendar | `GET /api/productivity/calendar`, `POST /api/productivity/calendar`, `PUT /api/productivity/calendar/{id}`, `PATCH /api/productivity/calendar/{id}/reschedule`, `DELETE /api/productivity/calendar/{id}` |
 | Career | `GET /api/career`, `PUT /api/career`, `GET /api/career/skills`, `POST /api/career/skills`, `PUT /api/career/skills/{id}`, `DELETE /api/career/skills/{id}` |
 | Recommendations | `POST /api/recommendations/generate`, `GET /api/recommendations`, `PATCH /api/recommendations/{id}/complete`, `PATCH /api/recommendations/{id}/dismiss` |
+| Roadmaps | `POST /api/roadmaps/generate`, `GET /api/roadmaps`, `GET /api/roadmaps/{id}`, `PATCH /api/roadmaps/{roadmapId}/steps/{stepId}/status`, `DELETE /api/roadmaps/{id}` |
 | Dashboard | `GET /api/dashboard` |
 
 Student-owned resource IDs are always resolved together with the authenticated student; no protected endpoint accepts a student ID from the browser.
 
 ## Gemini setup and architecture
 
-Gemini is optional for ordinary startup and automated tests. For live generation, set `GEMINI_API_KEY` in the backend process, optionally set `GEMINI_MODEL`, start MySQL and the backend, authenticate, save some student context, then call `POST /api/recommendations/generate`.
+Gemini is optional for ordinary startup and automated tests. For live generation, set `GEMINI_API_KEY` in the backend process, optionally set `GEMINI_MODEL`, start MySQL and the backend, authenticate, then explicitly call `POST /api/recommendations/generate` or `POST /api/roadmaps/generate`.
 
 ```text
 React -> Spring controller -> RecommendationService
       -> RecommendationProvider -> GeminiClient -> Gemini HTTPS API
+
+React -> Spring controller -> RoadmapService
+      -> RoadmapProvider -> GeminiClient -> Gemini HTTPS API
 ```
 
-The API key never reaches the browser. Provider output is treated as untrusted: it is parsed, bounded to five items, enum-validated, normalized, deduplicated, and only then persisted. The dashboard never invokes Gemini.
+The API key never reaches the browser. Provider output is treated as untrusted and is validated before persistence. Roadmap generation occurs only when the student presses **Generate Roadmap**; opening `/roadmaps` reads saved `roadmaps` and `roadmap_steps` data from MySQL. Step statuses are stored in MySQL and overall progress is calculated in Java from completed steps. The dashboard reads this stored progress and never invokes Gemini.
 
 ## Security model
 

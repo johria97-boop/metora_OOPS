@@ -21,6 +21,7 @@ export default function AppNav() {
           <NavLink className="nav-link" to="/productivity">Productivity</NavLink>
           <NavLink className="nav-link" to="/career">Career</NavLink>
           <NavLink className="nav-link" to="/recommendations">Recommendations</NavLink>
+          <NavLink className="nav-link" to="/roadmaps">Roadmaps</NavLink>
           <button className="btn btn-sm btn-outline-secondary" type="button" onClick={logout}>Logout</button>
         </div>
       </div>

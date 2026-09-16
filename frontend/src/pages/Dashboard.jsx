@@ -54,6 +54,27 @@ export default function DashboardPage() {
               <SummaryMetric label="Pending tasks" value={dashboard.tasks.pendingTaskCount} />
               <SummaryMetric label="Active habits" value={dashboard.habits.totalHabits} />
               <SummaryMetric label="Active recommendations" value={dashboard.recommendations.activeCount} />
+              <SummaryMetric label="Active roadmaps" value={dashboard.roadmaps.activeRoadmapCount} />
+            </section>
+
+            <section className="dashboard-panel rounded-4 shadow-sm p-4 mb-4">
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h2 className="h5 mb-0">Learning roadmap</h2>
+                <Link to="/roadmaps">View roadmaps</Link>
+              </div>
+              {dashboard.roadmaps.currentRoadmap == null ? (
+                <p className="text-secondary mb-0">No saved roadmap yet — <Link to="/roadmaps">generate a learning path</Link>.</p>
+              ) : (
+                <>
+                  <div className="d-flex justify-content-between small mb-1">
+                    <strong>{dashboard.roadmaps.currentRoadmap.courseName}</strong>
+                    <span>{dashboard.roadmaps.currentRoadmap.completedSteps}/{dashboard.roadmaps.currentRoadmap.totalSteps} steps · {percent(dashboard.roadmaps.currentRoadmap.progress)}</span>
+                  </div>
+                  <div className="progress" role="progressbar" aria-label={`${dashboard.roadmaps.currentRoadmap.courseName} progress`} aria-valuenow={dashboard.roadmaps.currentRoadmap.progress} aria-valuemin="0" aria-valuemax="100">
+                    <div className="progress-bar bg-success" style={{ width: `${dashboard.roadmaps.currentRoadmap.progress}%` }} />
+                  </div>
+                </>
+              )}
             </section>
 
             <div className="row g-4 mb-4">
@@ -193,7 +214,7 @@ export default function DashboardPage() {
 }
 
 function SummaryMetric({ label, value }) {
-  return <div className="col-6 col-lg-3"><article className="dashboard-metric rounded-4 shadow-sm p-3 h-100"><p className="small text-secondary mb-1">{label}</p><strong className="h4 mb-0">{value}</strong></article></div>
+  return <div className="col-6 col-md-4 col-xl"><article className="dashboard-metric rounded-4 shadow-sm p-3 h-100"><p className="small text-secondary mb-1">{label}</p><strong className="h4 mb-0">{value}</strong></article></div>
 }
 
 function Fact({ label, value }) {

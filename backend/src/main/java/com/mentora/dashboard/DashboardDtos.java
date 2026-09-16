@@ -21,7 +21,8 @@ public final class DashboardDtos {
             HabitSummary habits,
             CalendarSummary calendar,
             CareerSummary career,
-            RecommendationSummary recommendations
+            RecommendationSummary recommendations,
+            RoadmapSummary roadmaps
     ) {
     }
 
@@ -109,6 +110,22 @@ public final class DashboardDtos {
     public record RecommendationSummary(
             int activeCount,
             List<RecommendationItem> activeRecommendations
+    ) {
+    }
+
+    public record RoadmapItem(
+            Long id,
+            String courseName,
+            double progress,
+            int completedSteps,
+            int totalSteps
+    ) {
+    }
+
+    public record RoadmapSummary(
+            int totalRoadmaps,
+            int activeRoadmapCount,
+            RoadmapItem currentRoadmap
     ) {
     }
 }
