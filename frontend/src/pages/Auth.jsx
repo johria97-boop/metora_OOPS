@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api, { getApiErrorMessage } from '../api.js'
+import api, { getAuthErrorMessage } from '../api.js'
 import { useAuth } from '../auth.jsx'
 
 const emptyForm = {
@@ -42,7 +42,7 @@ export default function AuthPage() {
       signIn(response.data.token)
       navigate('/dashboard', { replace: true })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'Unable to authenticate. Please try again.'))
+      setError(getAuthErrorMessage(requestError, mode))
     } finally {
       setSubmitting(false)
     }

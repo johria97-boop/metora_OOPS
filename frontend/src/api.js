@@ -20,7 +20,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const publicAuthRequest = ['/auth/login', '/auth/register'].includes(error.config?.url)
+    if (error.response?.status === 401 && !publicAuthRequest) {
       clearAccessToken()
       if (window.location.pathname !== '/auth') {
         window.location.replace('/auth')
@@ -44,6 +45,32 @@ export function clearAccessToken() {
 
 export function getApiErrorMessage(error, fallback) {
   return error.response?.data?.message ?? fallback
+}
+
+export function getAuthErrorMessage(error, mode) {
+  if (!error.response) {
+    return 'Unable to connect to the server. Please try again.'
+  }
+
+  const { status, data } = error.response
+  if (status === 401) {
+    return 'Invalid email or password.'
+  }
+  if (status === 400) {
+    return typeof data?.message === 'string' && data.message.trim()
+      ? data.message
+      : 'Please check the information you entered.'
+  }
+  if (status >= 500) {
+    return 'Something went wrong on the server. Please try again.'
+  }
+  if (mode === 'login') {
+    return 'Something went wrong. Please try again.'
+  }
+
+  return typeof data?.message === 'string' && data.message.trim()
+    ? data.message
+    : 'Something went wrong. Please try again.'
 }
 
 export default api
